@@ -13,7 +13,7 @@ enum CallStatus {
   CONNECTING = 'CONNECTING',
   ACTIVE = 'ACTIVE',
   FINISHED = 'FINISHED',
-  ERROR = 'ERROR',
+  ERROR = 'ERROR', // Added new status for error state
 }
 
 interface ErrorState {
@@ -39,7 +39,7 @@ const CompanionComponent = ({
     hasError: false,
     message: '',
   });
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout>();
   const maxRetries = 3;
   const [retryCount, setRetryCount] = useState(0);
 
@@ -70,13 +70,13 @@ const CompanionComponent = ({
       resetError();
       setCallStatus(CallStatus.CONNECTING);
 
-      const assistant = configureAssistant(voice, style);
-
-      await vapi.start(assistant, {
+      const assistantOverrides = {
         variableValues: { subject, topic, style },
-        clientMessages: [],
+        clientMessages: ['transcript'],
         serverMessages: [],
-      });
+      };
+
+      await vapi.start(configureAssistant(voice, style), assistantOverrides);
     } catch (error) {
       console.error('Failed to start call:', error);
       handleError('Failed to start the call. Please try again.');
@@ -92,7 +92,7 @@ const CompanionComponent = ({
           `Retrying connection... Attempt ${retryCount + 1}/${maxRetries}`
         );
         startCall();
-      }, 2000);
+      }, 2000); // Wait 2 seconds before retrying
     } else {
       handleError('Maximum retry attempts reached. Please try again later.');
       setCallStatus(CallStatus.ERROR);
@@ -102,7 +102,7 @@ const CompanionComponent = ({
   useEffect(() => {
     const onCallStart = () => {
       setCallStatus(CallStatus.ACTIVE);
-      setRetryCount(0);
+      setRetryCount(0); // Reset retry count on successful connection
       resetError();
     };
 
@@ -138,10 +138,12 @@ const CompanionComponent = ({
     vapi.on('speech-end', onSpeechEnd);
 
     return () => {
+      // Clean up retry timeout if it exists
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
       }
 
+      // Ensure we cleanup properly
       if (callStatus === CallStatus.ACTIVE) {
         vapi.stop();
       }
@@ -170,7 +172,7 @@ const CompanionComponent = ({
 
   const handleCall = async () => {
     if (callStatus === CallStatus.CONNECTING) {
-      return;
+      return; // Prevent multiple connection attempts
     }
 
     await startCall();
